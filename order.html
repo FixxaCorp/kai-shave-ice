@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order — Kai Shave Ice</title>
+  <meta name="description" content="Order Hawaiian-style shave ice online from Kai Shave Ice in Morro Bay, CA." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    :root {
+      --cream: #F5F0E1;
+      --brown: #3E2723;
+      --brown-mid: #78350F;
+      --red: #E8432D;
+      --yellow: #F5B731;
+      --blue: #38BDF8;
+      --blue-deep: #0284C7;
+      --coral: #FB923C;
+      --mint: #34D399;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--cream); color: var(--brown); font-family: 'DM Sans', sans-serif; overflow-x: hidden; }
+
+    .btn { transition: transform .15s ease, background .2s ease; cursor: pointer; }
+    .btn:hover { transform: scale(1.04); }
+    .btn:active { transform: scale(0.97); }
+
+    .flavor-pick { transition: transform .2s ease, box-shadow .2s ease; cursor: pointer; user-select: none; }
+    .flavor-pick:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(62,39,35,.12); }
+    .flavor-pick.selected { transform: translateY(-4px) scale(1.03); box-shadow: 0 12px 30px rgba(62,39,35,.2); outline: 3px solid var(--brown); outline-offset: 2px; }
+    .flavor-pick.sold-out { opacity: .5; pointer-events: none; }
+
+    .topping-check { transition: transform .15s ease; cursor: pointer; user-select: none; }
+    .topping-check:hover { transform: scale(1.03); }
+    .topping-check.selected { outline: 3px solid var(--brown); outline-offset: 2px; }
+
+    .step { display: none; }
+    .step.active { display: block; animation: fadeIn .4s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+    .step-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--brown); background: transparent; transition: background .2s; }
+    .step-dot.done { background: var(--mint); border-color: var(--mint); }
+    .step-dot.current { background: var(--blue); border-color: var(--blue); }
+
+    *:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+  </style>
+</head>
+<body>
+
+  <!-- NAV (matches index.html) -->
+  <nav style="background:var(--cream);border-bottom:2px solid var(--brown);" class="sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <a href="index.html" class="cursor-pointer">
+        <img src="assets/logo.jpg" alt="Kai Shave Ice" style="height:52px;border-radius:50%;border:2px solid var(--brown);" />
+      </a>
+      <div class="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-widest" style="color:var(--brown-mid)">
+        <a href="index.html#flavors" class="hover:text-[var(--red)] transition-colors cursor-pointer">Flavors</a>
+        <a href="index.html#story" class="hover:text-[var(--red)] transition-colors cursor-pointer">About</a>
+        <a href="index.html#find" class="hover:text-[var(--red)] transition-colors cursor-pointer">Find Us</a>
+      </div>
+      <a href="order.html" class="btn text-sm font-bold uppercase tracking-widest px-5 py-2.5 rounded-full" style="background:var(--red);color:white">
+        Order Now
+      </a>
+    </div>
+  </nav>
+
+  <!-- HEADER -->
+  <div class="text-center py-10 px-6">
+    <h1 class="font-['Pacifico'] mb-2" style="font-size:clamp(2.5rem,7vw,5rem);color:var(--brown)">Order Up!</h1>
+    <p class="text-lg" style="color:var(--brown-mid);opacity:.6">Build your perfect shave ice in 4 easy steps</p>
+
+    <!-- Step indicators -->
+    <div class="flex items-center justify-center gap-3 mt-6" id="stepIndicators">
+      <div class="step-dot current" data-step="1"></div>
+      <div class="w-8 h-0.5" style="background:var(--brown);opacity:.2"></div>
+      <div class="step-dot" data-step="2"></div>
+      <div class="w-8 h-0.5" style="background:var(--brown);opacity:.2"></div>
+      <div class="step-dot" data-step="3"></div>
+      <div class="w-8 h-0.5" style="background:var(--brown);opacity:.2"></div>
+      <div class="step-dot" data-step="4"></div>
+    </div>
+  </div>
+
+  <div class="max-w-4xl mx-auto px-6 pb-20">
+
+    <!-- ═══ STEP 1: PICK FLAVORS ═══ -->
+    <div class="step active" id="step1">
+      <h2 class="font-bold text-2xl mb-2" style="color:var(--brown)">Step 1: Pick Your Flavor(s)</h2>
+      <p class="mb-6 text-sm" style="color:var(--brown-mid);opacity:.6">Tap to select — pick up to 3 flavors for a custom combo!</p>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4" id="flavorGrid">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="flex justify-end mt-8">
+        <button onclick="goToStep(2)" class="btn font-bold px-8 py-3.5 rounded-full text-sm uppercase tracking-wider" style="background:var(--brown);color:var(--cream)" id="step1Next" disabled>
+          Next: Customize →
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 2: CUSTOMIZE ═══ -->
+    <div class="step" id="step2">
+      <h2 class="font-bold text-2xl mb-2" style="color:var(--brown)">Step 2: Customize It</h2>
+      <p class="mb-6 text-sm" style="color:var(--brown-mid);opacity:.6">Add toppings, pick your size, and how many!</p>
+
+      <!-- Toppings -->
+      <h3 class="font-bold text-lg mb-3" style="color:var(--brown)">Toppings</h3>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8" id="toppingGrid">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Size -->
+      <h3 class="font-bold text-lg mb-3" style="color:var(--brown)">Size</h3>
+      <div class="flex gap-4 mb-8">
+        <button onclick="setSize('regular')" class="btn size-btn flex-1 p-4 rounded-2xl border-2 text-center font-bold" style="border-color:var(--brown);background:white" data-size="regular">
+          <span class="text-2xl block mb-1">🍧</span>
+          Regular<br/><span class="text-sm font-normal" style="color:var(--brown-mid)">$6.00</span>
+        </button>
+        <button onclick="setSize('large')" class="btn size-btn flex-1 p-4 rounded-2xl border-2 text-center font-bold" style="border-color:var(--brown);background:white" data-size="large">
+          <span class="text-3xl block mb-1">🍧</span>
+          Large<br/><span class="text-sm font-normal" style="color:var(--brown-mid)">$8.00</span>
+        </button>
+      </div>
+
+      <!-- Quantity -->
+      <h3 class="font-bold text-lg mb-3" style="color:var(--brown)">Quantity</h3>
+      <div class="flex items-center gap-4 mb-8">
+        <button onclick="changeQty(-1)" class="btn w-12 h-12 rounded-full border-2 font-bold text-xl" style="border-color:var(--brown);background:white;color:var(--brown)">−</button>
+        <span class="text-2xl font-bold" id="qtyDisplay" style="color:var(--brown)">1</span>
+        <button onclick="changeQty(1)" class="btn w-12 h-12 rounded-full border-2 font-bold text-xl" style="border-color:var(--brown);background:white;color:var(--brown)">+</button>
+      </div>
+
+      <div class="flex justify-between mt-8">
+        <button onclick="goToStep(1)" class="btn font-bold px-6 py-3 rounded-full text-sm uppercase tracking-wider" style="border:2px solid var(--brown);color:var(--brown);background:transparent">
+          ← Back
+        </button>
+        <button onclick="goToStep(3)" class="btn font-bold px-8 py-3.5 rounded-full text-sm uppercase tracking-wider" style="background:var(--brown);color:var(--cream)">
+          Next: Review →
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 3: REVIEW + INFO ═══ -->
+    <div class="step" id="step3">
+      <h2 class="font-bold text-2xl mb-2" style="color:var(--brown)">Step 3: Review & Info</h2>
+      <p class="mb-6 text-sm" style="color:var(--brown-mid);opacity:.6">Check your order and tell us who you are!</p>
+
+      <!-- Order summary -->
+      <div class="rounded-3xl border-2 p-6 mb-8" style="border-color:var(--brown);background:white">
+        <h3 class="font-bold text-lg mb-4" style="color:var(--brown)">Your Order</h3>
+        <div id="orderSummary"></div>
+        <div class="border-t-2 mt-4 pt-4 flex justify-between font-bold text-xl" style="border-color:var(--brown);color:var(--brown)">
+          <span>Total</span>
+          <span id="orderTotal">$0.00</span>
+        </div>
+      </div>
+
+      <!-- Customer info -->
+      <div class="rounded-3xl border-2 p-6 mb-8" style="border-color:var(--brown);background:white">
+        <h3 class="font-bold text-lg mb-4" style="color:var(--brown)">Your Info</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block font-bold text-sm mb-1" style="color:var(--brown)">Name *</label>
+            <input type="text" id="customerName" placeholder="Your name" class="w-full px-4 py-3 rounded-xl border-2 font-medium" style="border-color:var(--brown);color:var(--brown);background:var(--cream)" required />
+          </div>
+          <div>
+            <label class="block font-bold text-sm mb-1" style="color:var(--brown)">Phone</label>
+            <input type="tel" id="customerPhone" placeholder="(optional) for order updates" class="w-full px-4 py-3 rounded-xl border-2 font-medium" style="border-color:var(--brown);color:var(--brown);background:var(--cream)" />
+          </div>
+          <div>
+            <label class="block font-bold text-sm mb-1" style="color:var(--brown)">Email</label>
+            <input type="email" id="customerEmail" placeholder="(optional) for receipt" class="w-full px-4 py-3 rounded-xl border-2 font-medium" style="border-color:var(--brown);color:var(--brown);background:var(--cream)" />
+          </div>
+          <div>
+            <label class="block font-bold text-sm mb-1" style="color:var(--brown)">Pickup Notes</label>
+            <input type="text" id="pickupNotes" placeholder="(optional) any special requests" class="w-full px-4 py-3 rounded-xl border-2 font-medium" style="border-color:var(--brown);color:var(--brown);background:var(--cream)" />
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-between mt-8">
+        <button onclick="goToStep(2)" class="btn font-bold px-6 py-3 rounded-full text-sm uppercase tracking-wider" style="border:2px solid var(--brown);color:var(--brown);background:transparent">
+          ← Back
+        </button>
+        <button onclick="goToStep(4)" id="toPaymentBtn" class="btn font-bold px-8 py-3.5 rounded-full text-sm uppercase tracking-wider" style="background:var(--red);color:white">
+          Pay Now →
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 4: PAYMENT ═══ -->
+    <div class="step" id="step4">
+      <h2 class="font-bold text-2xl mb-2" style="color:var(--brown)">Step 4: Payment</h2>
+      <p class="mb-6 text-sm" style="color:var(--brown-mid);opacity:.6">Almost there — just the final step!</p>
+
+      <div class="rounded-3xl border-2 p-6 mb-6" style="border-color:var(--brown);background:white">
+        <div class="flex justify-between font-bold text-xl mb-6" style="color:var(--brown)">
+          <span>Total</span>
+          <span id="paymentTotal">$0.00</span>
+        </div>
+        <div id="card-element" class="p-4 rounded-xl border-2" style="border-color:var(--brown);background:var(--cream)"></div>
+        <div id="card-errors" class="text-sm mt-2 font-bold" style="color:var(--red)"></div>
+      </div>
+
+      <div class="flex justify-between mt-8">
+        <button onclick="goToStep(3)" class="btn font-bold px-6 py-3 rounded-full text-sm uppercase tracking-wider" style="border:2px solid var(--brown);color:var(--brown);background:transparent">
+          ← Back
+        </button>
+        <button onclick="submitOrder()" id="payBtn" class="btn font-bold px-8 py-3.5 rounded-full text-sm uppercase tracking-wider" style="background:var(--mint);color:var(--brown)">
+          Place Order 🤙
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 5: CONFIRMATION ═══ -->
+    <div class="step" id="step5">
+      <div class="text-center py-12">
+        <div class="text-6xl mb-6">🤙</div>
+        <h2 class="font-['Pacifico'] mb-4" style="font-size:clamp(2rem,6vw,4rem);color:var(--brown)">Your shave ice is on the way!</h2>
+        <p class="text-xl font-bold mb-2" style="color:var(--blue-deep)" id="confirmOrderNum">Order #---</p>
+        <p class="text-lg mb-8" style="color:var(--brown-mid)">We'll have it ready for you shortly. Mahalo!</p>
+        <a href="order.html" class="btn inline-block font-bold px-8 py-3.5 rounded-full text-sm uppercase tracking-wider" style="background:var(--brown);color:var(--cream)">
+          Order Another
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <footer style="background:#451A03;padding:2.5rem 1.5rem">
+    <div style="max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1.5rem">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.jpg" alt="Kai Shave Ice" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--yellow)" />
+        <div>
+          <p class="font-['Pacifico']" style="color:var(--cream);font-size:1.1rem">Kai Shave Ice</p>
+          <p style="color:var(--cream);opacity:.4;font-size:.75rem">Morro Bay, CA · Made with aloha 🤙</p>
+        </div>
+      </div>
+      <div class="flex gap-6 text-xs font-bold uppercase tracking-widest" style="color:var(--cream);opacity:.4">
+        <a href="index.html#flavors" class="hover:opacity-100 transition-opacity cursor-pointer">Flavors</a>
+        <a href="index.html#story" class="hover:opacity-100 transition-opacity cursor-pointer">About</a>
+        <a href="index.html#find" class="hover:opacity-100 transition-opacity cursor-pointer">Find Us</a>
+        <a href="https://instagram.com/kaishaveicemb" target="_blank" class="hover:opacity-100 transition-opacity cursor-pointer">Instagram</a>
+      </div>
+      <p style="color:var(--cream);opacity:.2;font-size:.75rem">© 2026 Kai Shave Ice</p>
+    </div>
+  </footer>
+
+  <script>
+    // ── Supabase ──
+    const SUPABASE_URL = 'https://npieagluyxpnlmjqiypn.supabase.co';
+    const SUPABASE_ANON_KEY = 'SUPABASE_ANON_KEY'; // ← Replace with your anon key
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ── Stripe ──
+    const STRIPE_PK = 'STRIPE_PUBLISHABLE_KEY'; // ← Replace with your publishable key
+    const stripe = Stripe(STRIPE_PK);
+    const elements = stripe.elements();
+    const cardElement = elements.create('card', {
+      style: {
+        base: { fontSize: '16px', color: '#3E2723', fontFamily: 'DM Sans, sans-serif', '::placeholder': { color: '#78350F' } },
+        invalid: { color: '#E8432D' }
+      }
+    });
+
+    // ── State ──
+    let menuItems = [];
+    let selectedFlavors = [];
+    let selectedToppings = [];
+    let selectedSize = 'regular';
+    let quantity = 1;
+    let currentStep = 1;
+    let orderId = null;
+
+    // ── Init ──
+    async function init() {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('available', true)
+        .order('sort_order');
+
+      if (error) {
+        console.error('Error loading menu:', error);
+        return;
+      }
+      menuItems = data || [];
+      renderFlavors();
+      renderToppings();
+    }
+
+    function renderFlavors() {
+      const grid = document.getElementById('flavorGrid');
+      const flavors = menuItems.filter(i => i.category === 'shave_ice');
+      grid.innerHTML = flavors.map(f => {
+        const lightBg = f.color + '18';
+        return `
+          <div class="flavor-pick rounded-2xl p-5 text-center border-2"
+               style="border-color:${f.color};background:linear-gradient(135deg,${lightBg},white)"
+               data-id="${f.id}" onclick="toggleFlavor('${f.id}')">
+            <div class="w-16 h-16 rounded-full mx-auto mb-3" style="background:${f.color};border:3px solid var(--brown)"></div>
+            <p class="font-bold text-sm" style="color:var(--brown)">${f.name}</p>
+            <p class="text-xs mt-0.5" style="color:var(--brown-mid);opacity:.5">${f.description}</p>
+            <p class="text-xs font-bold mt-1" style="color:var(--brown)">$${parseFloat(f.price).toFixed(2)}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderToppings() {
+      const grid = document.getElementById('toppingGrid');
+      const toppings = menuItems.filter(i => i.category === 'topping');
+      grid.innerHTML = toppings.map(t => `
+        <div class="topping-check rounded-2xl p-4 border-2 flex items-center gap-3"
+             style="border-color:var(--brown);background:white"
+             data-id="${t.id}" onclick="toggleTopping('${t.id}')">
+          <div class="w-8 h-8 rounded-full flex-shrink-0" style="background:${t.color};border:2px solid var(--brown)"></div>
+          <div class="text-left">
+            <p class="font-bold text-sm" style="color:var(--brown)">${t.name}</p>
+            <p class="text-xs" style="color:var(--brown-mid)">+$${parseFloat(t.price).toFixed(2)}</p>
+          </div>
+          <div class="ml-auto text-lg" style="color:var(--brown)">
+            ${selectedToppings.includes(t.id) ? '✓' : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function toggleFlavor(id) {
+      const idx = selectedFlavors.indexOf(id);
+      if (idx > -1) {
+        selectedFlavors.splice(idx, 1);
+      } else if (selectedFlavors.length < 3) {
+        selectedFlavors.push(id);
+      }
+      // Update UI
+      document.querySelectorAll('.flavor-pick').forEach(el => {
+        el.classList.toggle('selected', selectedFlavors.includes(el.dataset.id));
+      });
+      document.getElementById('step1Next').disabled = selectedFlavors.length === 0;
+    }
+
+    function toggleTopping(id) {
+      const idx = selectedToppings.indexOf(id);
+      if (idx > -1) {
+        selectedToppings.splice(idx, 1);
+      } else {
+        selectedToppings.push(id);
+      }
+      renderToppings();
+    }
+
+    function setSize(size) {
+      selectedSize = size;
+      document.querySelectorAll('.size-btn').forEach(el => {
+        const isSelected = el.dataset.size === size;
+        el.style.background = isSelected ? 'var(--brown)' : 'white';
+        el.style.color = isSelected ? 'var(--cream)' : 'var(--brown)';
+      });
+    }
+
+    function changeQty(delta) {
+      quantity = Math.max(1, Math.min(5, quantity + delta));
+      document.getElementById('qtyDisplay').textContent = quantity;
+    }
+
+    function getTotal() {
+      const sizePrice = selectedSize === 'large' ? 8 : 6;
+      const toppingTotal = selectedToppings.reduce((sum, id) => {
+        const item = menuItems.find(i => i.id === id);
+        return sum + (item ? parseFloat(item.price) : 0);
+      }, 0);
+      return (sizePrice + toppingTotal) * quantity;
+    }
+
+    function renderSummary() {
+      const summary = document.getElementById('orderSummary');
+      const flavorNames = selectedFlavors.map(id => menuItems.find(i => i.id === id)?.name).filter(Boolean);
+      const toppingNames = selectedToppings.map(id => {
+        const item = menuItems.find(i => i.id === id);
+        return item ? `${item.name} (+$${parseFloat(item.price).toFixed(2)})` : '';
+      }).filter(Boolean);
+
+      const sizePrice = selectedSize === 'large' ? 8 : 6;
+      const total = getTotal();
+
+      summary.innerHTML = `
+        <div class="space-y-2">
+          <div class="flex justify-between">
+            <span class="font-bold">Shave Ice (${selectedSize})</span>
+            <span>$${sizePrice.toFixed(2)} × ${quantity}</span>
+          </div>
+          <div class="text-sm" style="color:var(--brown-mid)">
+            Flavors: ${flavorNames.join(', ')}
+          </div>
+          ${toppingNames.length ? `
+            <div class="text-sm" style="color:var(--brown-mid)">
+              Toppings: ${toppingNames.join(', ')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      document.getElementById('orderTotal').textContent = `$${total.toFixed(2)}`;
+      document.getElementById('paymentTotal').textContent = `$${total.toFixed(2)}`;
+    }
+
+    // ── Steps ──
+    let cardMounted = false;
+
+    function goToStep(step) {
+      // Validation
+      if (step === 2 && selectedFlavors.length === 0) return;
+      if (step === 4) {
+        const name = document.getElementById('customerName').value.trim();
+        if (!name) {
+          document.getElementById('customerName').focus();
+          return;
+        }
+      }
+
+      if (step === 3 || step === 4) renderSummary();
+
+      // Mount card element when reaching step 4
+      if (step === 4 && !cardMounted) {
+        setTimeout(() => {
+          cardElement.mount('#card-element');
+          cardMounted = true;
+        }, 100);
+      }
+
+      currentStep = step;
+      document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+      document.getElementById(`step${step}`).classList.add('active');
+
+      // Update indicators
+      document.querySelectorAll('.step-dot').forEach(dot => {
+        const s = parseInt(dot.dataset.step);
+        dot.className = 'step-dot';
+        if (s < step) dot.classList.add('done');
+        else if (s === step) dot.classList.add('current');
+      });
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Submit ──
+    async function submitOrder() {
+      const payBtn = document.getElementById('payBtn');
+      payBtn.disabled = true;
+      payBtn.textContent = 'Processing...';
+
+      const total = getTotal();
+      const flavorNames = selectedFlavors.map(id => menuItems.find(i => i.id === id)?.name).filter(Boolean);
+      const toppingNames = selectedToppings.map(id => menuItems.find(i => i.id === id)?.name).filter(Boolean);
+
+      const orderItems = {
+        flavors: flavorNames,
+        toppings: toppingNames,
+        size: selectedSize,
+        quantity: quantity
+      };
+
+      const customerName = document.getElementById('customerName').value.trim();
+      const customerPhone = document.getElementById('customerPhone').value.trim();
+      const customerEmail = document.getElementById('customerEmail').value.trim();
+      const pickupNotes = document.getElementById('pickupNotes').value.trim();
+
+      try {
+        // 1. Create order in Supabase
+        const { data: order, error: orderError } = await supabase
+          .from('orders')
+          .insert({
+            customer_name: customerName,
+            customer_phone: customerPhone || null,
+            customer_email: customerEmail || null,
+            items: orderItems,
+            subtotal: total,
+            total: total,
+            pickup_notes: pickupNotes || null,
+            status: 'pending'
+          })
+          .select()
+          .single();
+
+        if (orderError) throw orderError;
+        orderId = order.id;
+
+        // 2. Create payment intent
+        const { data: piData, error: piError } = await supabase.functions.invoke('create-payment-intent', {
+          body: {
+            amount: Math.round(total * 100),
+            order_id: order.id,
+            customer_email: customerEmail || null
+          }
+        });
+
+        if (piError) throw piError;
+
+        // 3. Confirm card payment
+        const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(piData.clientSecret, {
+          payment_method: { card: cardElement }
+        });
+
+        if (stripeError) {
+          document.getElementById('card-errors').textContent = stripeError.message;
+          payBtn.disabled = false;
+          payBtn.textContent = 'Place Order 🤙';
+          return;
+        }
+
+        // 4. Update order with payment info
+        await supabase
+          .from('orders')
+          .update({
+            stripe_payment_intent_id: paymentIntent.id,
+            stripe_payment_status: paymentIntent.status,
+            status: 'confirmed'
+          })
+          .eq('id', order.id);
+
+        // 5. Show confirmation
+        document.getElementById('confirmOrderNum').textContent = `Order #${order.order_number}`;
+        goToStep(5);
+
+      } catch (err) {
+        console.error('Order error:', err);
+        document.getElementById('card-errors').textContent = err.message || 'Something went wrong. Please try again.';
+        payBtn.disabled = false;
+        payBtn.textContent = 'Place Order 🤙';
+      }
+    }
+
+    // Set default size highlight
+    setSize('regular');
+    init();
+  </script>
+</body>
+</html>

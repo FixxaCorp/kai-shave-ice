@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Kai Shave Ice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --cream: #F5F0E1;
+      --brown: #3E2723;
+      --brown-mid: #78350F;
+      --red: #E8432D;
+      --yellow: #F5B731;
+      --blue: #38BDF8;
+      --blue-deep: #0284C7;
+      --mint: #34D399;
+      --coral: #FB923C;
+    }
+    * { box-sizing: border-box; }
+    body { background: var(--cream); color: var(--brown); font-family: 'DM Sans', sans-serif; }
+
+    .btn { transition: transform .15s ease; cursor: pointer; }
+    .btn:hover { transform: scale(1.03); }
+
+    .order-card { transition: transform .2s ease, box-shadow .2s ease; }
+    .order-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(62,39,35,.1); }
+
+    .tab { cursor: pointer; padding: .75rem 1.5rem; font-weight: 700; font-size: .875rem; text-transform: uppercase; letter-spacing: .1em; border-radius: 999px; transition: background .2s, color .2s; }
+    .tab.active { background: var(--brown); color: var(--cream); }
+    .tab:not(.active) { color: var(--brown-mid); }
+    .tab:not(.active):hover { background: rgba(62,39,35,.08); }
+
+    .panel { display: none; }
+    .panel.active { display: block; animation: fadeIn .3s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    *:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+
+    /* Login overlay */
+    #loginOverlay { position: fixed; inset: 0; z-index: 100; background: var(--cream); display: flex; align-items: center; justify-content: center; }
+    #loginOverlay.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="loginOverlay">
+    <div class="text-center p-8">
+      <img src="assets/logo.jpg" alt="Kai Shave Ice" style="width:100px;height:100px;border-radius:50%;border:3px solid var(--brown);margin:0 auto 1.5rem" />
+      <h1 class="font-['Pacifico'] text-3xl mb-6" style="color:var(--brown)">Admin Login</h1>
+      <input type="password" id="loginPassword" placeholder="Enter password" class="w-64 px-4 py-3 rounded-xl border-2 font-medium text-center mb-4" style="border-color:var(--brown);color:var(--brown);background:white" onkeydown="if(event.key==='Enter')tryLogin()" />
+      <br/>
+      <button onclick="tryLogin()" class="btn font-bold px-8 py-3 rounded-full text-sm uppercase tracking-wider" style="background:var(--brown);color:var(--cream)">
+        Enter
+      </button>
+      <p id="loginError" class="text-sm font-bold mt-3" style="color:var(--red);display:none">Wrong password</p>
+    </div>
+  </div>
+
+  <!-- ADMIN NAV -->
+  <nav style="background:var(--cream);border-bottom:2px solid var(--brown);" class="sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="assets/logo.jpg" alt="Kai Shave Ice" style="height:42px;border-radius:50%;border:2px solid var(--brown);" />
+        <span class="font-bold text-sm uppercase tracking-widest" style="color:var(--brown-mid)">Admin</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-xs px-3 py-1 rounded-full font-bold" style="background:var(--mint);color:var(--brown)" id="autoRefreshBadge">Auto-refresh: 30s</span>
+        <a href="index.html" class="btn text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full" style="border:2px solid var(--brown);color:var(--brown)">
+          View Site
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-6xl mx-auto px-6 py-8">
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="kpiCards">
+      <div class="rounded-2xl p-5 border-2" style="border-color:var(--brown);background:white">
+        <p class="text-xs font-bold uppercase tracking-wider mb-1" style="color:var(--brown-mid);opacity:.5">Today's Sales</p>
+        <p class="text-3xl font-bold" style="color:var(--mint)" id="kpiSales">$0</p>
+      </div>
+      <div class="rounded-2xl p-5 border-2" style="border-color:var(--brown);background:white">
+        <p class="text-xs font-bold uppercase tracking-wider mb-1" style="color:var(--brown-mid);opacity:.5">Orders</p>
+        <p class="text-3xl font-bold" style="color:var(--blue-deep)" id="kpiOrders">0</p>
+      </div>
+      <div class="rounded-2xl p-5 border-2" style="border-color:var(--brown);background:white">
+        <p class="text-xs font-bold uppercase tracking-wider mb-1" style="color:var(--brown-mid);opacity:.5">Top Flavor</p>
+        <p class="text-xl font-bold" style="color:var(--coral)" id="kpiTopFlavor">—</p>
+      </div>
+      <div class="rounded-2xl p-5 border-2" style="border-color:var(--brown);background:white">
+        <p class="text-xs font-bold uppercase tracking-wider mb-1" style="color:var(--brown-mid);opacity:.5">Avg Order</p>
+        <p class="text-3xl font-bold" style="color:var(--yellow)" id="kpiAvg">$0</p>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="flex gap-2 mb-8 flex-wrap">
+      <div class="tab active" onclick="switchTab('orders')">Orders</div>
+      <div class="tab" onclick="switchTab('inventory')">Inventory</div>
+      <div class="tab" onclick="switchTab('revenue')">Revenue</div>
+    </div>
+
+    <!-- ═══ ORDERS PANEL ═══ -->
+    <div class="panel active" id="panel-orders">
+      <div class="flex items-center gap-4 mb-6 flex-wrap">
+        <h2 class="font-bold text-xl" style="color:var(--brown)">Order Queue</h2>
+        <div class="flex gap-2">
+          <button onclick="filterOrders('all')" class="btn text-xs font-bold px-4 py-1.5 rounded-full border-2" style="border-color:var(--brown);color:var(--brown)" id="filter-all">All</button>
+          <button onclick="filterOrders('pending')" class="btn text-xs font-bold px-4 py-1.5 rounded-full" style="background:var(--yellow);color:var(--brown)" id="filter-pending">Pending</button>
+          <button onclick="filterOrders('confirmed')" class="btn text-xs font-bold px-4 py-1.5 rounded-full" style="background:var(--blue);color:white" id="filter-confirmed">Confirmed</button>
+          <button onclick="filterOrders('ready')" class="btn text-xs font-bold px-4 py-1.5 rounded-full" style="background:var(--mint);color:var(--brown)" id="filter-ready">Ready</button>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4" id="orderQueue">
+        <!-- Populated by JS -->
+      </div>
+      <p id="noOrders" class="text-center py-12 text-lg" style="color:var(--brown-mid);opacity:.4;display:none">No orders yet today</p>
+    </div>
+
+    <!-- ═══ INVENTORY PANEL ═══ -->
+    <div class="panel" id="panel-inventory">
+      <h2 class="font-bold text-xl mb-6" style="color:var(--brown)">Menu & Inventory</h2>
+      <div class="space-y-3" id="inventoryList">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <!-- ═══ REVENUE PANEL ═══ -->
+    <div class="panel" id="panel-revenue">
+      <h2 class="font-bold text-xl mb-6" style="color:var(--brown)">7-Day Revenue</h2>
+      <div class="rounded-2xl border-2 p-6" style="border-color:var(--brown);background:white">
+        <canvas id="revenueChart" height="300"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ── Supabase ──
+    const SUPABASE_URL = 'https://npieagluyxpnlmjqiypn.supabase.co';
+    const SUPABASE_ANON_KEY = 'SUPABASE_ANON_KEY'; // ← Replace with your anon key
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const ADMIN_PASSWORD = 'kaishaveice2024';
+    let menuItems = [];
+    let orders = [];
+    let orderFilter = 'all';
+    let revenueChart = null;
+
+    // ── Login ──
+    function tryLogin() {
+      const pw = document.getElementById('loginPassword').value;
+      if (pw === ADMIN_PASSWORD) {
+        document.getElementById('loginOverlay').classList.add('hidden');
+        loadAll();
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+      }
+    }
+
+    // ── Tabs ──
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelector(`.tab[onclick="switchTab('${tab}')"]`).classList.add('active');
+      document.getElementById(`panel-${tab}`).classList.add('active');
+      if (tab === 'revenue') renderRevenueChart();
+    }
+
+    // ── Load all ──
+    async function loadAll() {
+      await Promise.all([loadMenu(), loadOrders()]);
+      updateKPIs();
+    }
+
+    async function loadMenu() {
+      const { data } = await sb.from('menu_items').select('*').order('sort_order');
+      menuItems = data || [];
+      renderInventory();
+    }
+
+    async function loadOrders() {
+      const today = new Date().toISOString().split('T')[0];
+      const { data } = await sb
+        .from('orders')
+        .select('*')
+        .gte('created_at', today + 'T00:00:00')
+        .order('created_at', { ascending: false });
+      orders = data || [];
+      renderOrders();
+    }
+
+    // ── KPIs ──
+    function updateKPIs() {
+      const todayOrders = orders.filter(o => o.status !== 'cancelled');
+      const totalSales = todayOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+      const orderCount = todayOrders.length;
+      const avgOrder = orderCount > 0 ? totalSales / orderCount : 0;
+
+      // Top flavor
+      const flavorCounts = {};
+      todayOrders.forEach(o => {
+        const items = o.items;
+        if (items && items.flavors) {
+          items.flavors.forEach(f => {
+            flavorCounts[f] = (flavorCounts[f] || 0) + (items.quantity || 1);
+          });
+        }
+      });
+      const topFlavor = Object.entries(flavorCounts).sort((a, b) => b[1] - a[1])[0];
+
+      document.getElementById('kpiSales').textContent = `$${totalSales.toFixed(0)}`;
+      document.getElementById('kpiOrders').textContent = orderCount;
+      document.getElementById('kpiTopFlavor').textContent = topFlavor ? topFlavor[0] : '—';
+      document.getElementById('kpiAvg').textContent = `$${avgOrder.toFixed(0)}`;
+    }
+
+    // ── Orders ──
+    function filterOrders(filter) {
+      orderFilter = filter;
+      renderOrders();
+    }
+
+    function renderOrders() {
+      const queue = document.getElementById('orderQueue');
+      const noOrders = document.getElementById('noOrders');
+      let filtered = orders;
+      if (orderFilter !== 'all') {
+        filtered = orders.filter(o => o.status === orderFilter);
+      }
+
+      if (filtered.length === 0) {
+        queue.innerHTML = '';
+        noOrders.style.display = 'block';
+        return;
+      }
+      noOrders.style.display = 'none';
+
+      queue.innerHTML = filtered.map(o => {
+        const items = o.items || {};
+        const flavors = (items.flavors || []).join(', ');
+        const toppings = (items.toppings || []).join(', ');
+        const time = new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const statusColors = {
+          pending: 'background:var(--yellow);color:var(--brown)',
+          confirmed: 'background:var(--blue);color:white',
+          ready: 'background:var(--mint);color:var(--brown)',
+          picked_up: 'background:var(--brown);color:var(--cream)',
+          cancelled: 'background:var(--red);color:white'
+        };
+
+        const nextStatus = {
+          pending: 'confirmed',
+          confirmed: 'ready',
+          ready: 'picked_up'
+        };
+
+        const nextLabel = {
+          pending: 'Confirm',
+          confirmed: 'Mark Ready',
+          ready: 'Picked Up'
+        };
+
+        return `
+          <div class="order-card rounded-2xl border-2 p-5" style="border-color:var(--brown);background:white">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-bold text-lg" style="color:var(--brown)">#${o.order_number}</span>
+              <span class="text-xs font-bold px-3 py-1 rounded-full" style="${statusColors[o.status] || ''}">${o.status}</span>
+            </div>
+            <p class="font-bold mb-1" style="color:var(--brown)">${o.customer_name}</p>
+            <p class="text-sm mb-1" style="color:var(--brown-mid)">${items.size || 'regular'} × ${items.quantity || 1} — ${flavors}</p>
+            ${toppings ? `<p class="text-xs mb-1" style="color:var(--brown-mid);opacity:.6">+ ${toppings}</p>` : ''}
+            ${o.pickup_notes ? `<p class="text-xs italic mb-2" style="color:var(--coral)">Note: ${o.pickup_notes}</p>` : ''}
+            <div class="flex items-center justify-between mt-3 pt-3 border-t" style="border-color:var(--brown);opacity:.2"></div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs" style="color:var(--brown-mid);opacity:.5">${time}</span>
+              <div class="flex gap-2">
+                <span class="font-bold" style="color:var(--brown)">$${parseFloat(o.total || 0).toFixed(2)}</span>
+                ${nextStatus[o.status] ? `
+                  <button onclick="updateOrderStatus('${o.id}','${nextStatus[o.status]}')"
+                    class="btn text-xs font-bold px-3 py-1 rounded-full"
+                    style="background:var(--mint);color:var(--brown)">
+                    ${nextLabel[o.status]}
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function updateOrderStatus(id, status) {
+      await sb.from('orders').update({ status }).eq('id', id);
+      await loadOrders();
+      updateKPIs();
+    }
+
+    // ── Inventory ──
+    function renderInventory() {
+      const list = document.getElementById('inventoryList');
+      list.innerHTML = menuItems.map(item => `
+        <div class="flex items-center gap-4 rounded-2xl border-2 p-4" style="border-color:var(--brown);background:white">
+          <div class="w-10 h-10 rounded-full flex-shrink-0" style="background:${item.color || '#ccc'};border:2px solid var(--brown)"></div>
+          <div class="flex-1">
+            <p class="font-bold" style="color:var(--brown)">${item.name}</p>
+            <p class="text-xs" style="color:var(--brown-mid);opacity:.5">${item.category} · $${parseFloat(item.price).toFixed(2)}</p>
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <span class="text-xs font-bold" style="color:${item.available ? 'var(--mint)' : 'var(--red)'}">${item.available ? 'Available' : 'Sold Out'}</span>
+            <div class="relative">
+              <input type="checkbox" ${item.available ? 'checked' : ''} onchange="toggleAvailability('${item.id}', this.checked)"
+                class="sr-only peer" />
+              <div class="w-11 h-6 rounded-full peer-checked:bg-[var(--mint)] bg-gray-300 transition-colors"></div>
+              <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow peer-checked:translate-x-5 transition-transform"></div>
+            </div>
+          </label>
+        </div>
+      `).join('');
+    }
+
+    async function toggleAvailability(id, available) {
+      await sb.from('menu_items').update({ available }).eq('id', id);
+      await loadMenu();
+    }
+
+    // ── Revenue Chart ──
+    async function renderRevenueChart() {
+      const days = [];
+      const labels = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        days.push(d.toISOString().split('T')[0]);
+        labels.push(d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
+      }
+
+      const { data } = await sb
+        .from('orders')
+        .select('total, created_at')
+        .gte('created_at', days[0] + 'T00:00:00')
+        .not('status', 'eq', 'cancelled');
+
+      const dailyTotals = days.map(day => {
+        return (data || [])
+          .filter(o => o.created_at.startsWith(day))
+          .reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+      });
+
+      const ctx = document.getElementById('revenueChart').getContext('2d');
+      if (revenueChart) revenueChart.destroy();
+
+      revenueChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Revenue ($)',
+            data: dailyTotals,
+            backgroundColor: 'rgba(14, 165, 233, 0.3)',
+            borderColor: '#0EA5E9',
+            borderWidth: 2,
+            borderRadius: 8,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: v => '$' + v,
+                color: '#78350F',
+                font: { family: 'DM Sans', weight: '700' }
+              },
+              grid: { color: 'rgba(62,39,35,.06)' }
+            },
+            x: {
+              ticks: {
+                color: '#78350F',
+                font: { family: 'DM Sans', weight: '500', size: 11 }
+              },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+    }
+
+    // ── Auto-refresh ──
+    setInterval(async () => {
+      if (document.getElementById('loginOverlay').classList.contains('hidden')) {
+        await loadOrders();
+        updateKPIs();
+      }
+    }, 30000);
+  </script>
+</body>
+</html>
