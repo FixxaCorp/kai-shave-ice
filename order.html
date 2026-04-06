@@ -56,9 +56,7 @@
   <!-- NAV (matches index.html) -->
   <nav style="background:var(--cream);border-bottom:2px solid var(--brown);" class="sticky top-0 z-50">
     <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-      <a href="index.html" class="cursor-pointer">
-        <img src="assets/logo.jpg" alt="Kai Shave Ice" style="height:52px;border-radius:50%;border:2px solid var(--brown);" />
-      </a>
+      <a href="index.html" class="cursor-pointer" style="font-family:'Pacifico',cursive;font-size:1.4rem;color:var(--brown);text-decoration:none">Kai Shave Ice</a>
       <div class="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-widest" style="color:var(--brown-mid)">
         <a href="index.html#flavors" class="hover:text-[var(--red)] transition-colors cursor-pointer">Flavors</a>
         <a href="index.html#story" class="hover:text-[var(--red)] transition-colors cursor-pointer">About</a>
@@ -94,6 +92,8 @@
       <h2 class="font-bold text-2xl mb-2" style="color:var(--brown)">Step 1: Pick Your Flavor(s)</h2>
       <p class="mb-6 text-sm" style="color:var(--brown-mid);opacity:.6">Tap to select — pick up to 3 flavors for a custom combo!</p>
 
+      <!-- Category tabs -->
+      <div class="flex flex-wrap gap-3 mb-6" id="categoryTabs"></div>
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4" id="flavorGrid">
         <!-- Populated by JS -->
       </div>
@@ -112,7 +112,7 @@
 
       <!-- Toppings -->
       <h3 class="font-bold text-lg mb-3" style="color:var(--brown)">Toppings</h3>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8" id="toppingGrid">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8 hidden" id="toppingGrid">
         <!-- Populated by JS -->
       </div>
 
@@ -257,7 +257,7 @@
   <script>
     // ── Supabase ──
     const SUPABASE_URL = 'https://npieagluyxpnlmjqiypn.supabase.co';
-    const SUPABASE_ANON_KEY = 'SUPABASE_ANON_KEY'; // ← Replace with your anon key
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5waWVhZ2x1eXhwbmxtanFpeXBuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NjI2MzcsImV4cCI6MjA5MTAzODYzN30.W1rZ_kmmgSTmQBx240334VnDaRYm58hN88qGCa8WOx4';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ── Stripe ──
@@ -280,21 +280,95 @@
     let currentStep = 1;
     let orderId = null;
 
+    // ── Fallback menu (works without Supabase) ──
+    const FALLBACK_MENU = [
+      {id:'f1',name:'Strawberry',description:'Classic',price:6,category:'shave_ice',color:'#F472B6',available:true},
+      {id:'f2',name:'Mango',description:'Tropical',price:6,category:'shave_ice',color:'#FB923C',available:true},
+      {id:'f3',name:'Blue Coconut',description:'Dreamy',price:6,category:'shave_ice',color:'#38BDF8',available:true},
+      {id:'f4',name:'Lilikoi',description:'Passion fruit',price:6,category:'shave_ice',color:'#FBBF24',available:true},
+      {id:'f5',name:'Matcha',description:'Earthy',price:6,category:'shave_ice',color:'#34D399',available:true},
+      {id:'f6',name:"Tiger's Blood",description:'Strawberry coconut',price:6,category:'shave_ice',color:'#EF4444',available:true},
+      {id:'f7',name:'Rainbow',description:'Go big',price:7,category:'shave_ice',color:'#A78BFA',available:true},
+      {id:'f8',name:'Watermelon',description:'Refreshing',price:6,category:'shave_ice',color:'#F87171',available:true},
+      {id:'f9',name:'Lemon',description:'Tart',price:6,category:'shave_ice',color:'#FDE047',available:true},
+      {id:'f10',name:'Grape',description:'Sweet',price:6,category:'shave_ice',color:'#A78BFA',available:true},
+      {id:'p1',name:'Ahi Tuna Bowl',description:'Fresh ahi, rice, house sauce',price:16,category:'poke',color:'#FB923C',available:true},
+      {id:'p2',name:'Salmon Bowl',description:'Atlantic salmon, avocado, sesame',price:16,category:'poke',color:'#F87171',available:true},
+      {id:'p3',name:'Spicy Tuna Bowl',description:'Ahi, spicy mayo, cucumber',price:17,category:'poke',color:'#EF4444',available:true},
+      {id:'p4',name:'Veggie Bowl',description:'Tofu, edamame, mango, avocado',price:14,category:'poke',color:'#34D399',available:true},
+      {id:'t1',name:'Cream',description:'Add cream',price:1,category:'topping',color:'#E5E7EB',available:true},
+      {id:'t2',name:'Mochi',description:'Chewy rice balls',price:1.5,category:'topping',color:'#FEF3C7',available:true},
+      {id:'t3',name:'Azuki Beans',description:'Sweet red bean',price:1.5,category:'topping',color:'#92400E',available:true},
+      {id:'t4',name:'Condensed Milk',description:'Sweet drizzle',price:0.75,category:'topping',color:'#FEF9C3',available:true},
+      {id:'t5',name:'Fresh Fruit',description:'Seasonal',price:2,category:'topping',color:'#34D399',available:true},
+    ];
+
+    let activeTab = 'shave_ice';
+
     // ── Init ──
     async function init() {
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('available', true)
-        .order('sort_order');
+      try {
+        const { data, error } = await supabase
+          .from('menu_items').select('*').eq('available', true).order('sort_order');
+        menuItems = (!error && data && data.length > 0) ? data : FALLBACK_MENU;
+      } catch(e) { menuItems = FALLBACK_MENU; }
+      renderTabs();
+      renderActiveTab();
+    }
 
-      if (error) {
-        console.error('Error loading menu:', error);
-        return;
-      }
-      menuItems = data || [];
-      renderFlavors();
-      renderToppings();
+    function renderTabs() {
+      const container = document.getElementById('categoryTabs');
+      if (!container) return;
+      container.innerHTML = [
+        {key:'shave_ice', label:'Shave Ice 🧊'},
+        {key:'poke', label:'Poke Bowls 🍣'},
+        {key:'topping', label:'Toppings ✨'},
+      ].map(tab => `
+        <button onclick="setTab('${tab.key}')" id="tab-${tab.key}"
+          class="px-5 py-2.5 rounded-full font-bold text-sm transition-all cursor-pointer border-2"
+          style="${activeTab===tab.key
+            ? 'background:var(--brown);color:var(--cream);border-color:var(--brown)'
+            : 'background:transparent;color:var(--brown);border-color:var(--brown)'}">
+          ${tab.label}
+        </button>
+      `).join('');
+    }
+
+    function setTab(tab) {
+      activeTab = tab;
+      renderTabs();
+      renderActiveTab();
+    }
+
+    function renderActiveTab() {
+      const grid = document.getElementById('flavorGrid');
+      const items = menuItems.filter(i => i.category === activeTab);
+      grid.innerHTML = items.map(item => {
+        const lightBg = (item.color || '#eee') + '22';
+        const isSelected = selectedFlavors.includes(item.id);
+        if (activeTab === 'topping') {
+          const isSel = selectedToppings.includes(item.id);
+          return \`<div class="topping-check rounded-2xl p-4 border-2 flex items-center gap-3 \${isSel?'selected':''}"
+               style="border-color:\${item.color||'var(--brown)'};background:white"
+               data-id="\${item.id}" onclick="toggleTopping('\${item.id}')">
+            <div class="w-8 h-8 rounded-full flex-shrink-0" style="background:\${item.color};border:2px solid var(--brown)"></div>
+            <div class="text-left flex-1">
+              <p class="font-bold text-sm" style="color:var(--brown)">\${item.name}</p>
+              <p class="text-xs" style="color:var(--brown-mid)">+$\${parseFloat(item.price).toFixed(2)}</p>
+            </div>
+            <div class="text-xl" style="color:var(--brown)">\${isSel ? '✓' : ''}</div>
+          </div>\`;
+        }
+        return \`<div class="flavor-pick rounded-2xl p-5 text-center border-2 \${isSelected?'selected':''}"
+             style="border-color:\${item.color};background:linear-gradient(135deg,\${lightBg},white)"
+             data-id="\${item.id}" onclick="toggleFlavor('\${item.id}')">
+          <div class="w-16 h-16 rounded-full mx-auto mb-3" style="background:\${item.color};border:3px solid var(--brown)"></div>
+          <p class="font-bold text-sm" style="color:var(--brown)">\${item.name}</p>
+          <p class="text-xs mt-0.5" style="color:var(--brown-mid);opacity:.6">\${item.description||''}</p>
+          <p class="text-xs font-bold mt-2" style="color:var(--brown)">$\${parseFloat(item.price).toFixed(2)}</p>
+          \${isSelected ? '<div class="mt-2 text-xs font-bold" style="color:var(--mint)">✓ Selected</div>' : ''}
+        </div>\`;
+      }).join('') || '<p class="col-span-full text-center py-8" style="color:var(--brown);opacity:.4">No items available</p>';
     }
 
     function renderFlavors() {
@@ -355,7 +429,7 @@
       } else {
         selectedToppings.push(id);
       }
-      renderToppings();
+      
     }
 
     function setSize(size) {
